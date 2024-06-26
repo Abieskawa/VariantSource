@@ -23,6 +23,7 @@ class plot_variant(object):
         self.ref_path = args.ref_path
         self.range = args.range
         self.out = args.out
+        self.skip = args.skip
 
     def readData(self):
         with open(self.vcf_path, 'r') as file:
@@ -62,9 +63,8 @@ class plot_variant(object):
         return GT_pos, parent_pos, target_pos, chrom_pos, variant_pos
     
     def process_data(self, vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,
-                     chr, pos_range_low = -1, pos_range_up = -1, ):
+                      chr, pos_range_low = -1, pos_range_up = -1, list_of_skips = []):
         data = []
-        
         for line in vcf:
             if './.' not in line:
                 cols = line.split('\t')
@@ -78,6 +78,15 @@ class plot_variant(object):
                                 if pos < pos_range_low or pos > pos_range_up :
                                     continue
                             
+                            if len(list_of_skips) != 0:
+                                t = []
+                                for skip in list_of_skips:
+                                    if pos == skip[1]:
+                                        t.append(-1)
+                                if len(t) != 0:
+                                    continue 
+                                        
+                                
                             genotypes = []
                             for ind in self.ind:
                                 genotypes.append(cols[target_ind_pos[ind]].split(':')[GT_pos]) 
@@ -210,13 +219,27 @@ class plot_variant(object):
     def run(self):
         vcf = self.readData()
         GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos = self.get_field(vcf)
+        list_of_skips = []
+        if self.skip[0] != '':
+            for skip_element in self.skip:
+                chr_skip = skip_element.split(':')[0]
+                pos_skip = int(skip_element.split(':')[1])
+                list_of_skips.append([chr_skip, pos_skip])
+    
         for element in self.range:
             if ":" in element:
                 chr = element.split(':')[0]
                 pos_range_low = int(element.split(':')[1].split('-')[0])
                 pos_range_up = int(element.split(':')[1].split('-')[1])
+                list_of_skips_this_time = []
+                for skip in list_of_skips:
+                    if chr == skip[0] and skip[1] >= pos_range_low and \
+                    skip[1] <= pos_range_up:
+                        list_of_skips_this_time.append([skip[0],skip[1]])
+
                 data = self.process_data(vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,
-                                         chr,pos_range_low,pos_range_up)
+                                         chr,pos_range_low,pos_range_up,
+                                         list_of_skips = list_of_skips_this_time)
                 matrix = self.create_matrix(data)
                 self.plot_heatmap(matrix, chr, element)
             else :

@@ -33,6 +33,7 @@ class visualize_variant_source(object):
         self.ref_path = argument[4].split('\t')[0]
         self.range = argument[5].split('\t')[0].split(',')
         self.out = argument[6].split('\t')[0]
+        self.skip = argument[7].split('\t')[0].split(',')
 
     
     def run(self):
