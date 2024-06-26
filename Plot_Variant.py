@@ -98,7 +98,7 @@ class plot_variant(object):
                     color = 1 
                 elif genotype in ['0|0', '0/0']:
                     color = 2
-                elif genotype in ['1|0', '1/0']:
+                elif genotype in ['1|0', '1/0', '0/1', '0|1']:
                     color = 3
                 matrix.at[self.ind[j], i] = color
         matrix.rename(columns=rename_list, inplace=True)

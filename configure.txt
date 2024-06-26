@@ -1,7 +1,7 @@
-chrom_level		#Mode: chrom_level,gene_level
+gene_level		#Mode: chrom_level,gene_level
 /Users/kenhsu/Dropbox/Mac/Desktop/311/高粱/master_thesis/WGSample/Out/30_vcf/qtlseq.vcf	#vcf file path
 parent_V9	#parent_name
 bulk1_1_10_4,bulk1_1_10_6,bulk1_1_10_14,bulk1_19_22_12,bulk1_19_24_12,bulk1_19_24_15,bulk2_2_16_18,bulk2_2_16_6,bulk2_6_13_14,bulk2_6_13_19,bulk2_15_1_20,bulk2_15_1_25,bulk2_15_1_15		#Order and ind want to show in the plot
 /Users/kenhsu/Dropbox/Mac/Desktop/311/高粱/master_thesis/WGSample/Out/10_ref/Sbicolor_454_v3.0.1.fa		#file path to reference genome
-Chr01,Chr02,Chr03,Chr04,Chr05,Chr06,Chr07,Chr08,Chr09,Chr10	#Range want to show
+Chr01:68034103-68043358	#Range want to show
 /Users/kenhsu/Dropbox/Mac/Desktop/MolecularBreeding/New_graph/		#Output plot path
