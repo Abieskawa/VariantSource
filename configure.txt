@@ -6,3 +6,4 @@ bulk1_1_10_4,bulk1_1_10_6,bulk1_1_10_14,bulk1_19_22_12,bulk1_19_24_12,bulk1_19_2
 Chr01:68034103-68043358	#Range want to show
 /Users/kenhsu/Dropbox/Mac/Desktop/MolecularBreeding/New_graph/		#Output plot path
 		#skip variants, only apply to gene_level
+		#Here is gtf file path to check each transcript flanking, but please check the gene name or id should be coherent, and please use gff3 here

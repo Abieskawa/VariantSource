@@ -34,6 +34,7 @@ class visualize_variant_source(object):
         self.range = argument[5].split('\t')[0].split(',')
         self.out = argument[6].split('\t')[0]
         self.skip = argument[7].split('\t')[0].split(',')
+        self.gff = argument[8].split('\t')[0]
 
     
     def run(self):

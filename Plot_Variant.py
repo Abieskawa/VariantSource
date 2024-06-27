@@ -11,6 +11,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
+import matplotlib.patches as mpatches
 
 
 class plot_variant(object):
@@ -24,6 +25,7 @@ class plot_variant(object):
         self.range = args.range
         self.out = args.out
         self.skip = args.skip
+        self.gff = args.gff
 
     def readData(self):
         with open(self.vcf_path, 'r') as file:
@@ -55,16 +57,24 @@ class plot_variant(object):
                         chrom_pos = cols.index(element)
                     if 'POS' in element:
                         variant_pos = cols.index(element)
+                    if 'INFO' in element:
+                        info_pos = cols.index(element)
 
                 for ind in self.ind:
                     target_pos[ind.strip()] = cols.index(ind)
                 
                     
-        return GT_pos, parent_pos, target_pos, chrom_pos, variant_pos
+        return GT_pos, parent_pos, target_pos, chrom_pos, variant_pos, info_pos
     
-    def process_data(self, vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,
+    def process_data(self, vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos, info_pos,
                       chr, pos_range_low = -1, pos_range_up = -1, list_of_skips = []):
-        data = []
+        if "ANN" in cols[info_pos]:
+            self.ann = 1
+            data = {}
+        else:
+            self.ann = 0
+            data = []
+        feature_id_list = []
         for line in vcf:
             if './.' not in line:
                 cols = line.split('\t')
@@ -91,28 +101,109 @@ class plot_variant(object):
                             for ind in self.ind:
                                 genotypes.append(cols[target_ind_pos[ind]].split(':')[GT_pos]) 
                             
-                            data.append((chrom, pos, genotypes))
+                            
+                            if self.ann == 1:
+                                details = cols[info_pos].split(';')[-1].split('|')
+                                Annotation_Impact = details[2]
+                                Gene_ID = details[4]
+                                feature_id = details[6]
+                                if feature_id not in feature_id_list:
+                                    feature_id_list.append(feature_id)
+                                    data[feature_id] = []
+                                    data[feature_id].append((chrom, pos, genotypes, Annotation_Impact, Gene_ID))
+                                else:
+                                    data[feature_id].append((chrom, pos, genotypes, Annotation_Impact, Gene_ID))
+                            else:
+                                data.append((chrom, pos, genotypes))
                          
         return data
 
     def create_matrix(self, data):
         length = len(data)
         matrix = pd.DataFrame('white', index=self.ind, columns=range(0, length))
+        impact_matrix = pd.DataFrame('white', index=self.ind, columns=range(0, length))
+        matrix_list = {}
         rename_list = {}
-        for i, record in enumerate(data):
-            chrom, pos, genotypes = record
-            rename_list[i] = pos
-            for j, genotype in enumerate(genotypes):
-                if genotype in ['1|1', '1/1']:
-                    color = 1 
-                elif genotype in ['0|0', '0/0']:
-                    color = 2
-                elif genotype in ['1|0', '1/0', '0/1', '0|1']:
-                    color = 3
-                matrix.at[self.ind[j], i] = color
-        matrix.rename(columns=rename_list, inplace=True)
+        
+        if self.ann == 1:
+            for key, value in data.items():
+                for i, record in enumerate(value):
+                    chrom, pos, genotypes,Annotation_Impact, Gene_ID, feature_id  = record
+                    rename_list[i] = pos
+                    for j, Annotation_Impact in enumerate(genotypes):
+                        if Annotation_Impact in ['HIGH']:
+                            color = 1 
+                        elif Annotation_Impact in ['MODERATE']:
+                            color = 2
+                        elif Annotation_Impact in ['LOW']:
+                            color = 3
+                        elif Annotation_Impact in ['MODIFIER']:
+                            color = 4
+                        matrix.at[self.ind[j], i] = color
 
-        return matrix
+                    for j, genotype in enumerate(genotypes):
+                        if genotype in ['1|1', '1/1']:
+                            color = 1 
+                        elif genotype in ['0|0', '0/0']:
+                            color = 2
+                        elif genotype in ['1|0', '1/0', '0/1', '0|1']:
+                            color = 3
+                    matrix.at[self.ind[j], i] = color
+                
+                self.gene_id = Gene_ID
+                self.feature_id = feature_id
+
+                #rename the column to variant name
+                impact_matrix.rename(columns=rename_list, inplace=True)
+                matrix.rename(columns=rename_list, inplace=True)
+
+            matrix_list[key] = [matrix,impact_matrix]
+
+            return matrix_list
+
+        else:
+            for i, record in enumerate(data):
+                chrom, pos, genotypes = record
+                rename_list[i] = pos
+                for j, genotype in enumerate(genotypes):
+                    if genotype in ['1|1', '1/1']:
+                        color = 1 
+                    elif genotype in ['0|0', '0/0']:
+                        color = 2
+                    elif genotype in ['1|0', '1/0', '0/1', '0|1']:
+                        color = 3
+                    matrix.at[self.ind[j], i] = color
+            #rename the column to variant name
+            matrix.rename(columns=rename_list, inplace=True)
+            return matrix
+
+
+    def load_gff3(self, file_path):
+        # Load the GFF3 file into a DataFrame
+        columns = ['seqid', 'source', 'type', 'start', 'end', 'score', 'strand', 'phase', 'attributes']
+        gff3_df = pd.read_csv(file_path, sep='\t', comment='#', names=columns, low_memory=False)
+        return gff3_df
+
+    def parse_attributes(self, attributes_str):
+        attributes = {}
+        for attribute in attributes_str.split(';'):
+            if '=' in attribute:
+                key, value = attribute.strip().split('=', 1)
+                attributes[key] = value
+        return attributes
+ 
+    def extract_transcripts(self,gff3_df):
+        # Filter for transcript features
+        transcript_df = gff3_df[gff3_df['type'].isin(['transcript', 'mRNA'])]
+
+        # Parse attributes column
+        transcript_df['attributes_dict'] = transcript_df['attributes'].apply(self.parse_attributes)
+
+        # Extract relevant attributes into separate columns
+        for attr in ['ID', 'Parent', 'Name']:
+            transcript_df[attr] = transcript_df['attributes_dict'].apply(lambda x: x.get(attr))
+
+        return transcript_df
     
     def modify_column_names(self,columns):
         new_columns = []
@@ -136,20 +227,43 @@ class plot_variant(object):
                 new_columns.append(col_str) 
         return new_columns
     
-    def plot_heatmap(self, matrix, chromosome, target_range):
+    def plot_heatmap(self, matrix, chromosome, target_range, impact_matrix):
+        if isinstance(matrix, list):
+            matrix = matrix[0]
+            impact_matrix = matrix[1]
+
         # Select specific colors from the PiYG colormap
         cmap = plt.get_cmap('viridis')
         color_list = [cmap(1.2), '#1E90FF', cmap(0.7)]  # Adjust the indices to pick desired colors
         custom_cmap = mcolors.ListedColormap(color_list)
+        if self.ann == 1:
+            cmap_impact = plt.get_cmap('inferno')
+            
 
         matrix_numeric = matrix.map(lambda x: pd.to_numeric(x, errors='coerce'))
         matrix_numeric.columns = self.modify_column_names(matrix_numeric.columns)
         
+        if self.ann == 1:
+            impact_matrix_numeric = matrix.map(lambda x: pd.to_numeric(x, errors='coerce'))
+            impact_matrix_numeric.columns = self.modify_column_names(matrix_numeric.columns)
         
         fig, ax = plt.subplots(figsize=(20, 5))
         #cax = ax.imshow(matrix_numeric.values, aspect='auto', cmap=custom_cmap, vmin=1, vmax=3)
         ax.pcolormesh(matrix_numeric.values, cmap=custom_cmap, vmin=1, vmax=3, edgecolors='none')
     
+        # Color text based on impact
+        if self.ann == 1:
+            for i,impacts in enumerate(impact_matrix_numeric.values):
+                color = 'black'  # default color
+                if 1 in impacts:
+                    color = "red"  # HIGH impact
+                elif 2 in impacts:
+                    color = cmap_impact(0.8)  # MODERATE impact
+                elif 3 in impacts:
+                    color = cmap_impact(0.4) #MODERATE impact
+                elif 4 in impacts:
+                    color = cmap_impact(0)
+                ax.text(-0.5, i + 0.5, ha='right', va='center', color=color, fontsize=8, weight='bold')
         # Show only a subset of the x-axis labels
         x_labels = matrix_numeric.columns
         
@@ -183,7 +297,7 @@ class plot_variant(object):
                 ax.axvline(x, color='black', linewidth=0.5)
         
         else:
-            sys.stderr.write(('{} No this kind mode'
+            sys.stderr.write(('{} There is no this kind of mode'
                                       ' type error!!\n').format(time_stamp()))
             sys.exit(1)
 
@@ -209,6 +323,14 @@ class plot_variant(object):
         handles = [plt.Rectangle((0,0),1,1, color=colors[label]) for label in labels]
         ax.legend(handles, labels, loc='upper center', bbox_to_anchor=(1.15, 1), borderaxespad=0.)
 
+        # Add legend for text colors
+        variant_legend = plt.legend(handles, labels, loc='upper right')
+        high_patch = mpatches.Patch(color='red', label='HIGH impact')
+        moderate_patch = mpatches.Patch(color='orange', label='MODERATE impact')
+        plt.legend(handles=[high_patch, moderate_patch], loc='lower right')
+        plt.gca().add_artist(variant_legend)
+
+
         #Adjust the canvas
         plt.tight_layout(rect=[0.1, 0, 0.9, 1])  
 
@@ -218,7 +340,7 @@ class plot_variant(object):
 
     def run(self):
         vcf = self.readData()
-        GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos = self.get_field(vcf)
+        GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos, info_pos = self.get_field(vcf)
         list_of_skips = []
         if self.skip[0] != '':
             for skip_element in self.skip:
@@ -228,6 +350,7 @@ class plot_variant(object):
     
         for element in self.range:
             if ":" in element:
+                #limit its range
                 chr = element.split(':')[0]
                 pos_range_low = int(element.split(':')[1].split('-')[0])
                 pos_range_up = int(element.split(':')[1].split('-')[1])
@@ -237,15 +360,22 @@ class plot_variant(object):
                     skip[1] <= pos_range_up:
                         list_of_skips_this_time.append([skip[0],skip[1]])
 
-                data = self.process_data(vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,
+                data = self.process_data(vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,info_pos,
                                          chr,pos_range_low,pos_range_up,
                                          list_of_skips = list_of_skips_this_time)
-                matrix = self.create_matrix(data)
-                self.plot_heatmap(matrix, chr, element)
+                if self.ann == 1:
+                    matrix_list = self.create_matrix(data)
+                    for feature_id, matrix_complex in matrix_list.items():
+                        print("plotting feature_id", feature_id)
+                        self.plot_heatmap(matrix_complex, chr, element)
+                else:
+                    matrix = self.create_matrix(data)
+                    self.plot_heatmap(matrix, chr, element)
             else :
                 chr = element
-                data = self.process_data(vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos, 
+                data = self.process_data(vcf, GT_pos, parent_pos, target_ind_pos, chrom_pos, variant_pos,info_pos,
                                          chr)
+                
                 matrix = self.create_matrix(data)
                 self.plot_heatmap(matrix, chr, element)
                 
